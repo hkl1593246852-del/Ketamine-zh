@@ -32,7 +32,6 @@ enum TweakCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// 本地化显示名，UI 用它代替 rawValue
     var displayName: String {
         NSLocalizedString(rawValue, comment: "")
     }

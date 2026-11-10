@@ -1,0 +1,68 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Install tools
+        run: |
+          brew install xcodegen ldid 2>/dev/null || brew install xcodegen
+          which xcodegen || true
+          which ldid || true
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project Ketamine.xcodeproj \
+            -scheme Ketamine \
+            -configuration Release \
+            -derivedDataPath build \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package
+        run: |
+          APP="build/Build/Products/Release-iphoneos/Ketamine.app"
+          ls -la "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          # 清掉旧的签名残留
+          rm -rf Payload/Ketamine.app/_CodeSignature
+          # ldid 重签，TrollStore 可装
+          if command -v ldid >/dev/null 2>&1; then
+            ldid -S Payload/Ketamine.app/Ketamine || true
+          fi
+          zip -qry Ketamine.ipa Payload
+
+      - name: Verify
+        run: |
+          ls -la Ketamine.ipa
+          unzip -l Ketamine.ipa | grep -E "lproj|Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleLocalizations" \
+            "Payload/Ketamine.app/Info.plist"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ketamine-zh-ipa
+          path: Ketamine.ipa
+          retention-days: 30
